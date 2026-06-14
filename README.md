@@ -66,8 +66,9 @@ blink_bluepill/
 - **libopencm3** — drivers de periferico, em modo *driver-only* (mantendo o startup e o
   linker do CubeIDE). Procedimento de instalacao e uso em
   [docs/libopencm3.md](docs/libopencm3.md).
-- **FreeRTOS** — kernel de tempo real (Cortex-M3, heap_4, 72 MHz). Atualmente **integrado e
-  linkado, mas sem tasks/escalonador ativos**. Como ativar o RTOS em
+- **FreeRTOS** — kernel de tempo real (Cortex-M3, heap_4, 72 MHz). Na branch
+  `feature/blink-freertos` o blink roda **sobre o RTOS**, com duas tasks coordenadas por uma
+  fila; na `main`, o kernel fica apenas integrado e linkado. Detalhes em
   [docs/freertos.md](docs/freertos.md).
 
 ## Documentacao

@@ -4,10 +4,11 @@ Este projeto integra o [FreeRTOS-Kernel](https://github.com/FreeRTOS/FreeRTOS-Ke
 firmware do STM32F103 (Blue Pill), que ja usa o libopencm3 como camada de drivers. O kernel
 e compilado junto com o projeto pelo CMake (nao ha build separado).
 
-Estado atual: o kernel esta **integrado, compilando e linkado**, mas **nenhuma task e criada
-e o escalonador nao e iniciado** ("so integrar o kernel"). O `Src/main.c` segue piscando o
-LED por busy-wait; o clock foi elevado para 72 MHz. Para por o RTOS para rodar de fato, veja
-a secao "Ativar o RTOS" no fim.
+Estado atual: o kernel esta **integrado e em execucao**. Na branch `feature/blink-freertos`,
+o `Src/main.c` pisca o LED por **duas tasks** coordenadas por uma **fila (queue)**, sob o
+escalonador (sem mais busy-wait); o clock e de 72 MHz. Os detalhes da aplicacao estao na
+secao "RTOS em execucao" no fim. (Na branch `main`, o `main.c` ainda usa o blink bare-metal
+por busy-wait, com o kernel apenas integrado e linkado.)
 
 ## Decisoes de projeto
 
@@ -90,27 +91,53 @@ cmake --build --preset Debug
 
 > **Sobre o tamanho no `.elf`:** o linker usa `-ffunction-sections -Wl,--gc-sections`, entao
 > codigo do kernel nao referenciado e descartado. Como os 3 handlers sao referenciados pela
-> vector table, boa parte do port entra; ja o heap (`ucHeap`, 10 KB) so passa a ocupar RAM
-> quando `pvPortMalloc`/`xTaskCreate` forem usados. Por isso, enquanto nao ha tasks, a RAM
-> usada continua baixa.
+> vector table, boa parte do port entra. Com as tasks ativas, o heap (`ucHeap`, 10 KB) passa
+> a ocupar RAM de fato: o build atual usa ~12,7 KB dos 20 KB (61,8%) e ~14 KB de FLASH (21,5%).
 
-## Ativar o RTOS (proximo passo)
+## RTOS em execucao (branch `feature/blink-freertos`)
 
-Para por o kernel para rodar, crie ao menos uma task e inicie o escalonador no `main`. O
-mapeamento de handlers e o clock de 72 MHz ja estao prontos.
+O `Src/main.c` desta branch poe o kernel para rodar de verdade. Para evidenciar a multitarefa
+com um unico LED de usuario (PC13), ha **duas tasks** que cooperam por uma **fila**:
+
+- **`vLedTask`** (prioridade 2) — unica dona do PC13. Inverte o LED e dorme com `vTaskDelay`
+  (entrega a CPU ao escalonador, ao contrario do busy-wait). A cada volta espia a fila, sem
+  bloquear, para adotar um novo ritmo.
+- **`vControlTask`** (prioridade 1) — a cada ~3 s envia pela fila o proximo periodo da lista
+  `{100, 250, 500, 1000}` ms. Resultado visivel: o pisca acelera/desacelera sozinho, provando
+  que ha duas tasks independentes conversando.
+
+Esqueleto (ver o arquivo completo, comentado, em [../Src/main.c](../Src/main.c)):
 
 ```c
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 
-static void blink_task(void *arg)
+static QueueHandle_t xPeriodQueue;   /* uint32_t: periodo de pisca em ms */
+
+static void vLedTask(void *arg)      /* prioridade 2: dona do LED */
 {
     (void)arg;
+    uint32_t period_ms = 500;
     for (;;) {
         gpio_toggle(GPIOC, GPIO13);
-        vTaskDelay(pdMS_TO_TICKS(500));   /* 500 ms, agendado pelo RTOS */
+        xQueueReceive(xPeriodQueue, &period_ms, 0);    /* nao bloqueia */
+        vTaskDelay(pdMS_TO_TICKS(period_ms / 2));
+    }
+}
+
+static void vControlTask(void *arg)  /* prioridade 1: muda o ritmo */
+{
+    (void)arg;
+    static const uint32_t periods[] = { 100, 250, 500, 1000 };
+    uint32_t i = 0;
+    for (;;) {
+        uint32_t next = periods[i];
+        xQueueSend(xPeriodQueue, &next, 0);
+        i = (i + 1) % (sizeof(periods) / sizeof(periods[0]));
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
 
@@ -120,11 +147,14 @@ int main(void)
     rcc_periph_clock_enable(RCC_GPIOC);
     gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
 
-    xTaskCreate(blink_task, "blink", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-    vTaskStartScheduler();   /* nunca retorna */
+    xPeriodQueue = xQueueCreate(1, sizeof(uint32_t));
+    xTaskCreate(vLedTask,     "led",  configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+    xTaskCreate(vControlTask, "ctrl", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+
+    vTaskStartScheduler();   /* nunca retorna em operacao normal */
     for (;;);                /* so chega aqui se faltar heap para o escalonador */
 }
 ```
 
-Ao ativar, lembre que `configTOTAL_HEAP_SIZE` (10 KB) passa a ocupar RAM de fato; ajuste se
-precisar de mais/menos.
+Com o RTOS ativo, `configTOTAL_HEAP_SIZE` (10 KB) ocupa RAM de fato; ajuste se precisar de
+mais/menos.

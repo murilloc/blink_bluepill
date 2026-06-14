@@ -109,8 +109,14 @@ static void vControlTask(void *pvParameters)
     (void)pvParameters;
 
     /* Periodos de pisca, em ms, percorridos em ciclo: rapido -> lento -> repete. */
-    static const uint32_t periods[] = { 100, 250, 500, 1000 };
+    static const uint32_t periods[] = { 100, 200, 400, 800, 1600 ,3200 };
+    /*
+        * O numero de elementos do array e o tamanho total dividido pelo tamanho de
+        * um elemento. O indice "index" percorre o array, voltando ao inicio ao
+        * chegar no fim (modulo "count").
+    */
     const uint32_t count = sizeof(periods) / sizeof(periods[0]);
+    /* O indice do periodo atual. Comeca em 0, ou seja, ritmo rapido. */
     uint32_t index = 0;
 
     for (;;) {
@@ -126,7 +132,7 @@ static void vControlTask(void *pvParameters)
         index = (index + 1) % count;
 
         /* Espera 3 s ate trocar de ritmo de novo, liberando a CPU nesse meio tempo. */
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 

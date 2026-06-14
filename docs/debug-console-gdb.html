@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>debug-console-gdb.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> or <div class="page"></div> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="debug-console--comandos-gdb-blue-pill--stm32f103">Debug Console — comandos GDB (Blue Pill / STM32F103)</h1>
+<p>Referência rápida dos comandos úteis na <strong>Debug Console</strong> do VS Code durante uma
+sessão de debug com a extensão STM32Cube (adaptador <code>stlinkgdbtarget</code>, GDB
+<code>arm-none-eabi-gdb</code> do bundle). Complementa o fluxo de gravação/debug em
+<a href="gravar-e-depurar.md">gravar-e-depurar.md</a>.</p>
+<h2 id="como-a-debug-console-interpreta-o-que-você-digita">Como a Debug Console interpreta o que você digita</h2>
+<p>A Debug Console tem <strong>dois modos</strong> de entrada:</p>
+<table>
+<thead>
+<tr>
+<th>Entrada</th>
+<th>Interpretação</th>
+<th>Exemplo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>sem</strong> prefixo</td>
+<td>avalia como <strong>expressão</strong> (no frame atual)</td>
+<td><code>uxTask</code>, <code>2 + 3</code>, <code>*pxPort</code></td>
+</tr>
+<tr>
+<td>com prefixo <code>&gt;</code></td>
+<td>envia o comando <strong>cru ao GDB</strong></td>
+<td><code>&gt;show version</code>, <code>&gt;info registers</code></td>
+</tr>
+</tbody>
+</table>
+<p>Por isso:</p>
+<ul>
+<li><strong>Comandos do GDB exigem o <code>&gt;</code>.</strong> Digitar <code>show version</code> sem o prefixo dá o erro
+<code>Evaluation of expression without frameId is not supported</code>, porque o VS Code tenta
+<em>avaliar uma expressão</em> e — se a CPU está rodando — não há frame de pilha selecionado.
+Com <code>&gt;</code>, o GDB executa o comando independentemente de frame e o erro some.</li>
+<li><strong>Avaliar expressões</strong> (nome de variável, <code>*ponteiro</code>, etc.) só funciona com o
+programa <strong>parado (halted)</strong> num breakpoint, pois aí existe um frame com escopo.</li>
+</ul>
+<p>Confirmação de que o console está vivo (este ambiente):</p>
+<pre class="hljs"><code><div>&gt;show version
+GNU gdb (GNU Tools for STM32 14.3.rel1.20251027-0700) 15.2.90.20241229-git
+...
+This GDB was configured as &quot;--host=x86_64-w64-mingw32 --target=arm-none-eabi&quot;.
+</div></code></pre>
+<hr>
+<h2 id="comandos-gdb-use-sempre-com-">Comandos GDB (use sempre com <code>&gt;</code>)</h2>
+<h3 id="sessão--informação">Sessão / informação</h3>
+<table>
+<thead>
+<tr>
+<th>Comando</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&gt;show version</code></td>
+<td>versão e configuração do GDB</td>
+</tr>
+<tr>
+<td><code>&gt;help</code></td>
+<td>lista de categorias de ajuda</td>
+</tr>
+<tr>
+<td><code>&gt;help &lt;cmd&gt;</code></td>
+<td>ajuda de um comando específico (ex.: <code>&gt;help break</code>)</td>
+</tr>
+<tr>
+<td><code>&gt;info all-registers</code></td>
+<td>todos os registradores do core</td>
+</tr>
+<tr>
+<td><code>&gt;info registers</code></td>
+<td>registradores de uso geral (r0–r15, xPSR)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="execução">Execução</h3>
+<table>
+<thead>
+<tr>
+<th>Comando</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&gt;continue</code> / <code>&gt;c</code></td>
+<td>continua a execução (= <code>F5</code>)</td>
+</tr>
+<tr>
+<td><code>&gt;next</code> / <code>&gt;n</code></td>
+<td>step over (uma linha, sem entrar em funções)</td>
+</tr>
+<tr>
+<td><code>&gt;step</code> / <code>&gt;s</code></td>
+<td>step into (entra na função)</td>
+</tr>
+<tr>
+<td><code>&gt;finish</code></td>
+<td>roda até retornar da função atual</td>
+</tr>
+<tr>
+<td><code>&gt;interrupt</code></td>
+<td>pausa/halt o alvo (= botão Pause)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Os botões da barra de debug (<code>F5</code>/<code>F10</code>/<code>F11</code>) fazem o mesmo e são mais práticos.
+O console brilha mesmo é para o que <strong>não tem botão</strong> (abaixo).</p>
+</blockquote>
+<h3 id="breakpoints--watchpoints">Breakpoints / watchpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Comando</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&gt;break main</code></td>
+<td>breakpoint na função <code>main</code></td>
+</tr>
+<tr>
+<td><code>&gt;break main.c:42</code></td>
+<td>breakpoint no arquivo/linha</td>
+</tr>
+<tr>
+<td><code>&gt;tbreak &lt;local&gt;</code></td>
+<td>breakpoint temporário (some após o 1º hit)</td>
+</tr>
+<tr>
+<td><code>&gt;info breakpoints</code></td>
+<td>lista breakpoints</td>
+</tr>
+<tr>
+<td><code>&gt;delete &lt;n&gt;</code></td>
+<td>remove o breakpoint nº <code>n</code></td>
+</tr>
+<tr>
+<td><code>&gt;watch uxCounter</code></td>
+<td>para quando a variável <strong>muda</strong> de valor</td>
+</tr>
+<tr>
+<td><code>&gt;rwatch uxCounter</code></td>
+<td>para quando a variável é <strong>lida</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="inspeção-de-memória--variáveis">Inspeção de memória / variáveis</h3>
+<table>
+<thead>
+<tr>
+<th>Comando</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&gt;print uxCounter</code> / <code>&gt;p uxCounter</code></td>
+<td>imprime valor (com <code>/x</code> para hex: <code>&gt;p/x var</code>)</td>
+</tr>
+<tr>
+<td><code>&gt;display uxCounter</code></td>
+<td>reimprime a cada parada</td>
+</tr>
+<tr>
+<td><code>&gt;ptype &lt;var&gt;</code></td>
+<td>mostra o tipo/struct</td>
+</tr>
+<tr>
+<td><code>&gt;x/8xw 0x20000000</code></td>
+<td>dump de memória: 8 words em hex a partir do endereço</td>
+</tr>
+<tr>
+<td><code>&gt;set var uxCounter = 0</code></td>
+<td>altera o valor de uma variável</td>
+</tr>
+<tr>
+<td><code>&gt;backtrace</code> / <code>&gt;bt</code></td>
+<td>pilha de chamadas do frame atual</td>
+</tr>
+<tr>
+<td><code>&gt;frame &lt;n&gt;</code> / <code>&gt;f &lt;n&gt;</code></td>
+<td>seleciona um frame da pilha</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Para <strong>variáveis em escopo</strong>, é mais simples digitá-las <strong>sem <code>&gt;</code></strong> (avaliação direta)
+ou usar o painel <strong>Variables</strong>/<strong>Watch</strong> do VS Code.</p>
+</blockquote>
+<hr>
+<h2 id="comandos-do-servidor-monitor-">Comandos do servidor (<code>&gt;monitor ...</code>)</h2>
+<p><code>monitor</code> repassa o comando ao <strong>ST-Link GDB Server</strong> (camada OpenOCD-like). Úteis:</p>
+<table>
+<thead>
+<tr>
+<th>Comando</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&gt;monitor reset</code></td>
+<td>reseta o alvo</td>
+</tr>
+<tr>
+<td><code>&gt;monitor halt</code></td>
+<td>para a CPU</td>
+</tr>
+<tr>
+<td><code>&gt;monitor reg</code></td>
+<td>registradores via servidor</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>A disponibilidade exata depende do servidor; se um <code>monitor</code> não responder, use o
+equivalente puro do GDB (ex.: <code>&gt;info registers</code> em vez de <code>&gt;monitor reg</code>).</p>
+</blockquote>
+<hr>
+<h2 id="periféricos-rcc-gpio---use-o-viewer-não-o-console">Periféricos (RCC, GPIO, ...) — use o viewer, não o console</h2>
+<p>Registradores de periféricos (ex.: <code>GPIOC-&gt;ODR</code>, <code>RCC-&gt;APB2ENR</code>) são melhor lidos pelo
+<strong>viewer de periféricos</strong> habilitado pelo <code>svdPath</code> no <code>launch.json</code> (extensão
+<code>stm32cube-ide-registers</code>), que decodifica os campos. Pelo console dá para ler o endereço
+cru, ex. o <code>ODR</code> do GPIOC (<code>0x4001100C</code>):</p>
+<pre class="hljs"><code><div>&gt;x/1xw 0x4001100C
+</div></code></pre>
+<hr>
+<h2 id="dicas-específicas-de-freertos">Dicas específicas de FreeRTOS</h2>
+<p>Com o kernel rodando (duas tasks + fila), o que costuma ajudar na hora de parar:</p>
+<ul>
+<li><code>&gt;bt</code> logo após um Pause mostra em qual task/contexto a CPU estava.</li>
+<li><code>&gt;print pxCurrentTCB</code> → TCB da task atual; <code>&gt;print *pxCurrentTCB</code> expande a struct
+(nome da task em <code>pcTaskName</code> se <code>configMAX_TASK_NAME_LEN</code> permitir).</li>
+<li><code>&gt;print uxCurrentNumberOfTasks</code> → quantas tasks existem.</li>
+<li>Breakpoint dentro de uma task (<code>&gt;break &lt;func_da_task&gt;</code>) para inspecionar a coordenação
+pela fila sem parar o scheduler manualmente.</li>
+</ul>
+<blockquote>
+<p>Para visão de tasks/filas em árvore, o ideal é um plugin RTOS-aware do GDB; sem ele,
+os comandos acima cobrem o essencial.</p>
+</blockquote>
+<hr>
+<h2 id="erro-comum">Erro comum</h2>
+<p><strong><code>Evaluation of expression without frameId is not supported</code></strong>
+→ Você mandou um comando GDB <strong>sem o <code>&gt;</code></strong> (ou tentou avaliar uma expressão com a CPU
+rodando). Solução: use <code>&gt;</code> para comandos GDB; para avaliar variáveis, pare num breakpoint
+primeiro.</p>
+
+</body>
+</html>

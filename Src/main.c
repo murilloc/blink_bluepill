@@ -67,6 +67,13 @@ int main(void)
      */
 
     /*
+     * Passo 0: configurar o clock de sistema em 72 MHz (cristal HSE de 8 MHz +
+     * PLL). Esse valor precisa bater com configCPU_CLOCK_HZ do FreeRTOSConfig.h,
+     * para o tick do RTOS ficar correto quando o escalonador for iniciado.
+     */
+    rcc_clock_setup_pll(&rcc_hse_configs[RCC_CLOCK_HSE8_72MHZ]);
+
+    /*
      * Passo 1: ligar o clock da porta C. Sem isto, qualquer escrita nos
      * registradores do GPIOC e ignorada pelo hardware.
      */
@@ -106,6 +113,6 @@ int main(void)
          * vezes por segundo e o LED pareceria so meio aceso. Ajuste o numero
          * para piscar mais rapido (menor) ou mais devagar (maior).
          */
-        delay(100000);
+        delay(900000);
     }
 }

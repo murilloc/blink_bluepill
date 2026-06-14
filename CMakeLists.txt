@@ -43,12 +43,23 @@ set(cpu_PARAMS
 # Sources
 set(sources_SRCS
 	${CMAKE_CURRENT_SOURCE_DIR}/Src/main.c
+	# --- FreeRTOS kernel ---
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/tasks.c
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/queue.c
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/list.c
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/timers.c
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/event_groups.c
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/stream_buffer.c
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/portable/GCC/ARM_CM3/port.c
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/portable/MemMang/heap_4.c
 )
 
 # Include directories for all compilers
 set(include_DIRS
 	${CMAKE_CURRENT_SOURCE_DIR}/Inc
 	${CMAKE_CURRENT_SOURCE_DIR}/libs/libopencm3/include
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/include
+	${CMAKE_CURRENT_SOURCE_DIR}/libs/FreeRTOS-Kernel/portable/GCC/ARM_CM3
 )
 
 # Include directories for each compiler

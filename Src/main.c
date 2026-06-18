@@ -36,24 +36,103 @@
 #include <libopencm3/stm32/gpio.h>
 
 /*
- * Atraso "burro" por espera ocupada (busy-wait): a CPU simplesmente conta ate
- * gastar tempo. Nao e preciso nem eficiente, mas e o jeito mais simples de
- * comecar (sem timers nem interrupcoes).
- *
- * - O parametro 'n' e quantas voltas o laco da. Quanto maior, maior o atraso.
- * - 'volatile' avisa o compilador: "NAO otimize este laco". Sem 'volatile', o
- *   compilador veria um laco que so decrementa e nao faz nada util, e o
- *   apagaria por completo -- o LED piscaria rapido demais para o olho ver.
- * - __asm__("nop") = "No OPeration", uma instrucao que gasta 1 ciclo sem fazer
- *   nada. Serve so para dar "corpo" ao laco.
- *
- * Observacao: o tempo real depende da frequencia da CPU. Aqui o chip roda no
- * clock interno padrao (HSI) de 8 MHz, pois nao configuramos nada diferente.
+ * Cabecalhos do FreeRTOS. Agora, em vez de um unico laco que faz tudo, o
+ * programa e dividido em "tarefas" (tasks): pequenas funcoes independentes que
+ * o escalonador (scheduler) do RTOS reveza na CPU. Cada uma "acha" que tem o
+ * processador so para si.
+ *   FreeRTOS.h -> nucleo do kernel; sempre incluir antes dos demais.
+ *   task.h     -> criar tarefas (xTaskCreate) e dormir sem gastar CPU (vTaskDelay).
+ *   queue.h    -> fila (queue): "cano" thread-safe por onde uma tarefa manda
+ *                 dados para outra. Aqui usamos para uma tarefa avisar a outra
+ *                 qual deve ser o novo ritmo do pisca.
  */
-static void delay(volatile uint32_t n)
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+
+/*
+ * Handle (referencia) da fila que liga a tarefa de controle a tarefa do LED.
+ * A fila transporta um uint32_t: o periodo de pisca desejado, em milissegundos.
+ * Fica em escopo de arquivo porque as duas tarefas precisam enxergar a mesma fila.
+ */
+static QueueHandle_t xPeriodQueue;
+
+/*
+ * Tarefa do LED: a unica que mexe no pino PC13 (boa pratica -- um recurso, um dono).
+ *
+ * A cada volta ela inverte o LED e dorme por 'period_ms'. O vTaskDelay NAO e um
+ * busy-wait: ele entrega a CPU ao escalonador, que roda outra tarefa (ou a tarefa
+ * ociosa, que pode poupar energia) ate o tempo passar. Isso e a diferenca central
+ * para o delay() bare-metal antigo, que desperdicava 100% da CPU contando nops.
+ *
+ * Antes de dormir, ela espia a fila SEM bloquear (timeout 0): se a tarefa de
+ * controle deixou um novo periodo la, ela adota; senao, segue com o periodo atual.
+ */
+static void vLedTask(void *pvParameters)
 {
-    while (n--) {
-        __asm__("nop");
+    (void)pvParameters; /* nao usamos o argumento; evita aviso de "nao usado" */
+
+    uint32_t period_ms = 500; /* ritmo inicial: 500 ms aceso, 500 ms apagado */
+
+    for (;;) {
+        /* Inverte o estado do pino: aceso <-> apagado a cada volta. */
+        gpio_toggle(GPIOC, GPIO13);
+
+        /*
+         * Tenta receber um novo periodo. O ultimo argumento (0) e o tempo maximo
+         * de espera: 0 = "nao espere, so me diga se ja tem algo". Se houver, o
+         * valor cai em period_ms e passa a valer da proxima volta em diante.
+         */
+        xQueueReceive(xPeriodQueue, &period_ms, 0);
+
+        /*
+         * Dorme metade do periodo: como invertemos a cada vTaskDelay, um ciclo
+         * completo (aceso + apagado) leva period_ms. pdMS_TO_TICKS converte
+         * milissegundos para "ticks" do RTOS conforme configTICK_RATE_HZ.
+         */
+        vTaskDelay(pdMS_TO_TICKS(period_ms / 2));
+    }
+}
+
+/*
+ * Tarefa de controle: nao toca no LED. A cada ~3 segundos ela escolhe o proximo
+ * ritmo de uma lista e o envia pela fila para a tarefa do LED. Resultado visivel:
+ * o pisca acelera e desacelera sozinho, provando que ha DUAS tarefas distintas
+ * rodando "ao mesmo tempo" e conversando por uma fila.
+ *
+ * Tem prioridade menor (1) que a tarefa do LED (2): em FreeRTOS, numero maior =
+ * mais prioritario. Como ambas passam quase todo o tempo dormindo, a prioridade
+ * so decide quem roda no raro instante em que as duas acordam juntas.
+ */
+static void vControlTask(void *pvParameters)
+{
+    (void)pvParameters;
+
+    /* Periodos de pisca, em ms, percorridos em ciclo: rapido -> lento -> repete. */
+    static const uint32_t periods[] = { 100, 200, 400, 800, 1600 ,3200 };
+    /*
+        * O numero de elementos do array e o tamanho total dividido pelo tamanho de
+        * um elemento. O indice "index" percorre o array, voltando ao inicio ao
+        * chegar no fim (modulo "count").
+    */
+    const uint32_t count = sizeof(periods) / sizeof(periods[0]);
+    /* O indice do periodo atual. Comeca em 0, ou seja, ritmo rapido. */
+    uint32_t index = 0;
+
+    for (;;) {
+        uint32_t next = periods[index];
+
+        /*
+         * Envia o proximo periodo. Timeout 0: se a fila estivesse cheia nao
+         * esperamos (a fila tem espaco 1 e a tarefa do LED a consome rapido).
+         */
+        xQueueSend(xPeriodQueue, &next, 0);
+
+        /* Avanca no ciclo, voltando ao inicio ao chegar no fim. */
+        index = (index + 1) % count;
+
+        /* Espera 3 s ate trocar de ritmo de novo, liberando a CPU nesse meio tempo. */
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
@@ -70,6 +149,9 @@ int main(void)
      * Passo 0: configurar o clock de sistema em 72 MHz (cristal HSE de 8 MHz +
      * PLL). Esse valor precisa bater com configCPU_CLOCK_HZ do FreeRTOSConfig.h,
      * para o tick do RTOS ficar correto quando o escalonador for iniciado.
+     *
+     * Toda a inicializacao de hardware acontece AQUI, antes de criar tarefas e
+     * iniciar o escalonador -- com a CPU ainda em "modo unico", sem concorrencia.
      */
     rcc_clock_setup_pll(&rcc_hse_configs[RCC_CLOCK_HSE8_72MHZ]);
 
@@ -80,39 +162,40 @@ int main(void)
     rcc_periph_clock_enable(RCC_GPIOC);
 
     /*
-     * Passo 2: configurar o pino PC13 como saida. Os 4 argumentos sao:
-     *   GPIOC                    -> em qual porta esta o pino.
-     *   GPIO_MODE_OUTPUT_2_MHZ   -> direcao SAIDA, com "velocidade" (slew rate)
-     *                               de ate 2 MHz. Para um LED, a opcao mais
-     *                               lenta ja basta e gera menos ruido.
-     *   GPIO_CNF_OUTPUT_PUSHPULL -> tipo de saida push-pull: o pino consegue
-     *                               tanto puxar para 3.3 V quanto para 0 V
-     *                               (o oposto seria "open-drain", que so puxa
-     *                               para 0 V).
-     *   GPIO13                   -> qual(is) pino(s) da porta. E uma mascara de
-     *                               bits; daria para configurar varios de uma
-     *                               vez com GPIO13 | GPIO14, por exemplo.
+     * Passo 2: configurar o pino PC13 como saida push-pull, velocidade de 2 MHz
+     * (a mais lenta basta para um LED e gera menos ruido).
      */
     gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ,
                   GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
 
     /*
-     * Laco principal e infinito: em firmware bare-metal nao ha sistema
-     * operacional para "voltar"; main() nunca deve terminar. Se terminasse, a
-     * CPU cairia em comportamento indefinido.
+     * Passo 3: criar a fila que liga as duas tarefas. Capacidade 1 elemento de
+     * sizeof(uint32_t): basta guardar o "ultimo ritmo pedido". A memoria sai do
+     * heap do FreeRTOS (heap_4, dimensionado por configTOTAL_HEAP_SIZE).
+     */
+    xPeriodQueue = xQueueCreate(1, sizeof(uint32_t));
+
+    /*
+     * Passo 4: criar as tarefas. Argumentos do xTaskCreate:
+     *   funcao da tarefa, nome (so para depuracao), tamanho da pilha em PALAVRAS
+     *   (nao bytes), parametro passado a tarefa, prioridade, handle de saida.
+     * configMINIMAL_STACK_SIZE (128 palavras = 512 bytes) e suficiente para estas
+     * tarefas simples.
+     */
+    xTaskCreate(vLedTask,     "led",  configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+    xTaskCreate(vControlTask, "ctrl", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+
+    /*
+     * Passo 5: ligar o escalonador. A partir daqui o FreeRTOS assume o controle e
+     * comeca a revezar as tarefas. Esta chamada NAO retorna em operacao normal.
+     */
+    vTaskStartScheduler();
+
+    /*
+     * So chegamos aqui se vTaskStartScheduler() falhar -- tipicamente por heap
+     * insuficiente para criar as tarefas/fila. Travamos num laco para nao cair em
+     * comportamento indefinido (e fica obvio na depuracao que algo deu errado).
      */
     for (;;) {
-        /*
-         * gpio_toggle inverte o estado do pino: se estava em 3.3 V vai a 0 V e
-         * vice-versa. A cada volta o LED troca entre aceso e apagado.
-         */
-        gpio_toggle(GPIOC, GPIO13);
-
-        /*
-         * Espera entre as trocas. Sem esse atraso, o pino trocaria milhoes de
-         * vezes por segundo e o LED pareceria so meio aceso. Ajuste o numero
-         * para piscar mais rapido (menor) ou mais devagar (maior).
-         */
-        delay(900000);
     }
 }

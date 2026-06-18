@@ -118,7 +118,8 @@ painel Run and Debug e pressione **`F5`**. Esperado:
 3. execução para em `main` (por `"runEntry": "main"`).
 
 Controles: Continue (`F5`), Step Over (`F10`), Step Into (`F11`). A Debug Console
-mostra logs de download/verify.
+mostra logs de download/verify. Para os comandos GDB úteis no console (`>show version`,
+`>info registers`, `>bt`, etc.), veja [debug-console-gdb.md](debug-console-gdb.md).
 
 ### Alternativa sem ST-Link: bootloader serial
 Adaptador USB-Serial 3.3V no UART1 (PA9/PA10): jumper `BOOT0=1` + RESET → grava com
